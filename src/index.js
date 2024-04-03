@@ -6,23 +6,21 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-console.log(__filename);
-console.log(__dirname);
-
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3500;
 const ADMIN = "Admin";
 
 const app = express();
+
 app.use(express.static(path.join(__dirname, "public")));
 
-const expressServer = app.listen(PORT, () =>
-  console.log(`Server listening on port ${PORT}...`)
-);
+const expressServer = app.listen(PORT, () => {
+  console.log(`listening on port ${PORT}`);
+});
 
 // state
 const UsersState = {
   users: [],
-  setUesrs: function (newUsersArray) {
+  setUsers: function (newUsersArray) {
     this.users = newUsersArray;
   },
 };
@@ -42,10 +40,10 @@ io.on("connection", (socket) => {
   // Upon connection - only to user
   socket.emit("message", buildMsg(ADMIN, "Welcome to Chat App!"));
 
-  //
   socket.on("enterRoom", ({ name, room }) => {
-    // leave a previous room if he was in other room
+    // leave previous room
     const prevRoom = getUser(socket.id)?.room;
+
     if (prevRoom) {
       socket.leave(prevRoom);
       io.to(prevRoom).emit(
@@ -53,11 +51,14 @@ io.on("connection", (socket) => {
         buildMsg(ADMIN, `${name} has left the room`)
       );
     }
+
     const user = activateUser(socket.id, name, room);
 
     // Cannot update previous room users list until after the state update in activate user
     if (prevRoom) {
-      io.to(prevRoom).emit("usersList", { users: getUsersInRoom(prevRoom) });
+      io.to(prevRoom).emit("userList", {
+        users: getUsersInRoom(prevRoom),
+      });
     }
 
     // join room
@@ -75,10 +76,14 @@ io.on("connection", (socket) => {
       .emit("message", buildMsg(ADMIN, `${user.name} has joined the room`));
 
     // Update user list for room
-    io.to(user.room).emit("usersList", { users: getUsersInRoom(user.room) });
+    io.to(user.room).emit("userList", {
+      users: getUsersInRoom(user.room),
+    });
 
     // Update rooms list for everyone
-    io.emit("roomsList", { rooms: getAllActiveRooms() });
+    io.emit("roomList", {
+      rooms: getAllActiveRooms(),
+    });
   });
 
   // When user disconnects - to all others
@@ -92,14 +97,19 @@ io.on("connection", (socket) => {
         buildMsg(ADMIN, `${user.name} has left the room`)
       );
 
-      io.to(user.room).emit("usersList", { users: getUsersInRoom(user.room) });
+      io.to(user.room).emit("userList", {
+        users: getUsersInRoom(user.room),
+      });
 
-      io.emit("roomsList", { rooms: getAllActiveRooms() });
+      io.emit("roomList", {
+        rooms: getAllActiveRooms(),
+      });
     }
 
     console.log(`User ${socket.id} disconnected`);
   });
 
+  // Listening for a message event
   socket.on("message", ({ name, text }) => {
     const room = getUser(socket.id)?.room;
     if (room) {
@@ -108,7 +118,7 @@ io.on("connection", (socket) => {
   });
 
   // Listen for activity
-  socket.on("activity", ({ name }) => {
+  socket.on("activity", (name) => {
     const room = getUser(socket.id)?.room;
     if (room) {
       socket.broadcast.to(room).emit("activity", name);
@@ -116,41 +126,40 @@ io.on("connection", (socket) => {
   });
 });
 
-const buildMsg = (name, text) => {
+function buildMsg(name, text) {
   return {
     name,
     text,
     time: new Intl.DateTimeFormat("default", {
-      timeZone: "Asia/Seoul",
       hour: "numeric",
       minute: "numeric",
       second: "numeric",
     }).format(new Date()),
   };
-};
+}
 
 // User functions
-const activateUser = (id, name, room) => {
+function activateUser(id, name, room) {
   const user = { id, name, room };
-  UsersState.setUesrs([
+  UsersState.setUsers([
     ...UsersState.users.filter((user) => user.id !== id),
     user,
   ]);
   return user;
-};
+}
 
-const userLeavesApp = (id) => {
-  UsersState.setUesrs(UsersState.users.filter((user) => user.id !== id));
-};
+function userLeavesApp(id) {
+  UsersState.setUsers(UsersState.users.filter((user) => user.id !== id));
+}
 
-const getUser = (id) => {
+function getUser(id) {
   return UsersState.users.find((user) => user.id === id);
-};
+}
 
-const getUsersInRoom = (room) => {
+function getUsersInRoom(room) {
   return UsersState.users.filter((user) => user.room === room);
-};
+}
 
-const getAllActiveRooms = () => {
+function getAllActiveRooms() {
   return Array.from(new Set(UsersState.users.map((user) => user.room)));
-};
+}
